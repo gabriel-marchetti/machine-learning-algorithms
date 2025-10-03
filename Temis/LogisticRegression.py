@@ -1,7 +1,7 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
-from math_utils._functions import sigmoid
+from Temis.math_utils._functions import sigmoid
 
 """
     

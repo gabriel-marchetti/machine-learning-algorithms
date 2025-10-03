@@ -6,7 +6,7 @@ from sklearn.datasets import make_classification
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
 
-from LogisticRegression import LogisticRegression
+from Temis.LogisticRegression import LogisticRegression
 
 if __name__ == "__main__":
     n_features = 5
