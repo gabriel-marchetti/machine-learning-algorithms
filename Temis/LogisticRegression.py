@@ -4,13 +4,42 @@ import jax.numpy as jnp
 from Temis.math_utils._functions import sigmoid
 
 """
-    
+    Class that implements Logistic Regression using JAX for automatic differentiation and optimization.    
+    Description:
+        
 """
 class LogisticRegression:
-    def __init__(self, lr=0.1, epochs=100, batch_size = 32):
+    def __init__(self,
+                 lr=0.1, 
+                 epochs=100, 
+                 batch_size = 32,
+                 regularization : str = None,
+                 lambda_reg : float = 0.01,
+                 fairness_regularization : str = None,
+                 lambda_fairness : float = 0.01):
+        '''
+        Class Contructor.
+        Parameters:
+            lr (float): Learning rate for gradient descent.     (Default is 0.1)
+            epochs (int): Number of epochs for training.        (Default is 100)
+            batch_size (int): Size of mini-batches for training.(Default is 32)
+            regularization (str): Type of regularization to apply. 
+                Options are 'l2', 'l1', or None.                (Default is None)
+            lambda_reg (float): Regularization strength.        (Default is 0.01)
+            fairness_regularization (str): Type of fairness regularization to apply.
+                Options are 'Rpr' or None.                      (Default is None)
+            lambda_fairness (float): Fairness regularization strength. 
+                                                                (Default is 0.01)
+        '''
         self.lr = lr
         self.epochs = epochs
         self.batch_size = batch_size
+        self.regularization = regularization
+        self.lambda_reg = lambda_reg
+        self.fairness_regularization = fairness_regularization
+        self.lambda_fairness = lambda_fairness
+        self.w = None
+        self.b = None
 
     def _cost_function(self, params, X : np.ndarray, y : np.ndarray):
         w, b = params
@@ -20,7 +49,25 @@ class LogisticRegression:
         y_pred = sigmoid(z)
         
         eps = 1e-9
-        cost = -jnp.mean(y * jnp.log(y_pred + eps) + (1-y) * jnp.log(1 - y_pred + eps))
+        base_cost = -jnp.mean(y * jnp.log(y_pred + eps) + (1-y) * jnp.log(1 - y_pred + eps))
+
+        reg_cost = 0.0
+        if self.regularization == 'l1':
+            reg_cost = self.lambda_reg * jnp.sum(jnp.abs(w))
+        elif self.regularization == 'l2':
+            reg_cost = (self.lambda_reg / 2) * jnp.sum(w ** 2)
+
+        fair_cost = 0.0
+#        if self.fairness_regularization == 'Rpr':
+#            p_y1 = y_pred 
+#            p_y0 = 1 - y_pred
+#
+#            p_hat_y1 = jnp.mean(p_y1)
+#            p_hat_y0 = jnp.mean(p_y0)
+#
+#            p_hat_y0_given_s1 = 
+
+        cost = base_cost + reg_cost + fair_cost
         return cost
 
     def fit(self, X : np.ndarray, y : np.ndarray):
@@ -44,6 +91,7 @@ class LogisticRegression:
 
                 self.w -= self.lr * dw
                 self.b -= self.lr * db
+
 
     def predict_probability(self, X : np.ndarray) -> np.ndarray:
         return sigmoid(jnp.dot(X, self.w) + self.b)
