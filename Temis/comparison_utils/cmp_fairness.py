@@ -12,7 +12,6 @@ def compare_fairness(models, X, y, sensitive_attr_index):
     models (dict): A dictionary where keys are model names and values are model instances with a predict method.
     X (pd.DataFrame): The input features including the sensitive attribute.
     sensitive_attr (str): The name of the sensitive attribute column in X.
-    threshold (float): The threshold to convert predicted probabilities to binary outcomes.
 
     Returns:
     pd.DataFrame: A DataFrame containing the fairness metrics for each model.
