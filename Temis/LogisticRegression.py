@@ -41,12 +41,17 @@ class LogisticRegression:
         self.w = None
         self.b = None
 
-    def _cost_function(self, params, X : np.ndarray, y : np.ndarray, S : np.ndarray = None) -> float:
+    def _cost_function(self, params, X : np.ndarray, y : np.ndarray, S : np.ndarray = None, debug : bool = False) -> float:
         w, b = params
         m = X.shape[0]
+        X = jnp.asarray(X)
+        y = jnp.asarray(y)
+        if S is not None:
+            S = jnp.asarray(S)
 
         z = jnp.dot(X, w) + b
         y_pred = sigmoid(z)
+        y_pred_0 = 1 - y_pred
         
         eps = 1e-9
         base_cost = -jnp.mean(y * jnp.log(y_pred + eps) + (1-y) * jnp.log(1 - y_pred + eps))
@@ -60,26 +65,66 @@ class LogisticRegression:
         fair_cost = 0.0
 
         if self.fair_penalty == 'Rpr':
-            p_y1 = jnp.mean(y_pred) + eps 
-            p_y0 = 1 - p_y1 + eps
+            if S is None:
+                raise ValueError("Sensitive attribute S must be provided for fairness penalty.")
+            p_y1 = jnp.mean(y_pred)
+            p_y0 = jnp.mean(y_pred_0)
 
-            p_y0_s0 = jnp.mean(1 - y_pred[S == 0])
-            p_y1_s1 = jnp.mean(y_pred[S == 1])
+            if(debug == True):
+                print(f"p_y1: {p_y1}, p_y0: {p_y0}")
 
-            ratio0 = jnp.clip(p_y0_s0 / p_y0, eps, 1/eps)
-            ratio1 = jnp.clip(p_y1_s1 / p_y1, eps, 1/eps)
+            mask0 = (S == 0)
+            mask1 = (S == 1)
+            count0 = jnp.sum(mask0)
+            count1 = jnp.sum(mask1)
+            div0 = jnp.maximum(count0, 1)
+            div1 = jnp.maximum(count1, 1)
+            
+            if(debug == True):
+                print(f'div0: {div0}, div1: {div1}')
 
-            fair_cost = self.fair_penalty_weight * (jnp.sum((1-y_pred) * ratio0 + (-y_pred) * ratio1))
+            p_y0_s0 = jnp.sum(y_pred_0 * mask0) / div0
+            p_y0_s1 = jnp.sum(y_pred_0 * mask1) / div1
+            p_y1_s0 = jnp.sum(y_pred * mask0) / div0
+            p_y1_s1 = jnp.sum(y_pred * mask1) / div1
 
+            if(debug == True):
+                print(f"p_y0_s0: {p_y0_s0}, p_y0_s1: {p_y0_s1}, p_y1_s0: {p_y1_s0}, p_y1_s1: {p_y1_s1}")
+
+            ratio_y0_s0 = p_y0_s0 / (p_y0 + eps)
+            ratio_y0_s1 = p_y0_s1 / (p_y0 + eps)
+            ratio_y1_s0 = p_y1_s0 / (p_y1 + eps)
+            ratio_y1_s1 = p_y1_s1 / (p_y1 + eps)
+
+            if(debug == True):
+                print(f"ratio_y0_s0: {ratio_y0_s0}, ratio_y0_s1: {ratio_y0_s1}, ratio_y1_s0: {ratio_y1_s0}, ratio_y1_s1: {ratio_y1_s1}")
+
+            log_ratio_y0 = jnp.where(mask0, jnp.log(ratio_y0_s0 + eps), jnp.log(ratio_y0_s1 + eps))
+            log_ratio_y1 = jnp.where(mask0, jnp.log(ratio_y1_s0 + eps), jnp.log(ratio_y1_s1 + eps))
+            
+            if(debug == True):
+                print(f"log_ratio_y0: {log_ratio_y0}, log_ratio_y1: {log_ratio_y1}")
+
+            rpr = jnp.mean(y_pred * log_ratio_y1 + y_pred_0 * log_ratio_y0)
+            fair_cost = self.fair_penalty_weight * rpr
+        
+        if debug == True:
+            print(f"Base Cost: {base_cost}, Reg Cost: {reg_cost}, Fair Cost: {fair_cost}")
         cost = base_cost + reg_cost + fair_cost
         return cost
 
     def fit(self, X : np.ndarray, y : np.ndarray, S : np.ndarray = None, debug : bool = False):
+        if(debug == True):
+            print('----------------------------------------------------------------------')
+        X = jnp.asarray(X)
+        y = jnp.asarray(y)
+        S = jnp.asarray(S) if S is not None else None
+
         m, n =  X.shape
         self.w = jnp.zeros(n)
         self.b = 0.0
 
-        grad = jax.grad(self._cost_function, argnums=0)
+        cost_grad = jax.jit(jax.grad(self._cost_function, argnums=0))
 
         for epoch in range(self.epochs):
             perm = np.random.permutation(m)
@@ -92,22 +137,25 @@ class LogisticRegression:
                 y_batch = y_shuffle[i:i+self.batch_size]
                 S_batch = S_shuffle[i:i+self.batch_size] if S is not None else None
 
-                grads = grad((self.w, self.b), X_batch, y_batch, S_batch)
+                grads = cost_grad((self.w, self.b), X_batch, y_batch, S_batch)
                 dw, db = grads
 
                 self.w -= self.lr * dw
                 self.b -= self.lr * db
             
             if debug == True:
-                cost = self._cost_function((self.w, self.b), X, y)
+                print("Debug Info:")
+                cost = self._cost_function((self.w, self.b), X, y, S, debug = True)
                 print(f"Epoch {epoch+1}/{self.epochs}, Cost: {cost}")
                 print(f"w: {self.w}, b: {self.b}")
 
 
     def predict_probability(self, X : np.ndarray) -> np.ndarray:
+        X = jnp.asarray(X)
         return sigmoid(jnp.dot(X, self.w) + self.b)
 
     def predict(self, X : np.ndarray, threshold : float = 0.5) -> np.ndarray:
+        X = jnp.asarray(X)
         return (self.predict_probability(X) >= threshold).astype(int)
 
     def print_debug_statement(self):

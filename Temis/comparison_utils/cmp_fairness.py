@@ -1,6 +1,8 @@
 import numpy as np 
 import pandas as pd
 
+from sklearn.metrics import roc_auc_score
+
 from Temis.fairness_metrics.spd import compute_spd
 from Temis.fairness_metrics.aod import compute_aod
 
