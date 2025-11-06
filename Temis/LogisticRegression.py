@@ -48,68 +48,89 @@ class LogisticRegression:
         y = jnp.asarray(y)
         if S is not None:
             S = jnp.asarray(S)
+        print(type(w))
+        print(type(b))
 
         z = jnp.dot(X, w) + b
         y_pred = sigmoid(z)
-        y_pred_0 = 1 - y_pred
         
-        eps = 1e-9
-        base_cost = -jnp.mean(y * jnp.log(y_pred + eps) + (1-y) * jnp.log(1 - y_pred + eps))
+        eps = 1e-5
+        base_cost = -jnp.mean(y * y_pred + (1-y) * (1 - y_pred))
 
         reg_cost = 0.0
         if self.penalty == 'l1':
-            reg_cost = self.penalty_weight * jnp.sum(jnp.abs(w))
+            reg_cost = (self.penalty_weight / 2) * jnp.sum(jnp.abs(w))
         elif self.penalty == 'l2':
-            reg_cost = self.penalty_weight * jnp.sum(w ** 2)
+            reg_cost = (self.penalty_weight / 2) * jnp.sum(w ** 2)
 
         fair_cost = 0.0
-
         if self.fair_penalty == 'Rpr':
-            if S is None:
-                raise ValueError("Sensitive attribute S must be provided for fairness penalty.")
-            p_y1 = jnp.mean(y_pred)
-            p_y0 = jnp.mean(y_pred_0)
-
-            if(debug == True):
-                print(f"p_y1: {p_y1}, p_y0: {p_y0}")
+            M = y * y_pred + (1-y) * (1 - y_pred)
+            pr_hat_y = jnp.mean(M) + eps
 
             mask0 = (S == 0)
             mask1 = (S == 1)
             count0 = jnp.sum(mask0)
             count1 = jnp.sum(mask1)
-            div0 = jnp.maximum(count0, 1)
-            div1 = jnp.maximum(count1, 1)
+            div0 = jnp.max(count0, 1)
+            div1 = jnp.max(count1, 1)
+
+            pr_hat_y_given_s0 = jnp.sum(M * mask0) / div0
+            pr_hat_y_given_s1 = jnp.sum(M * mask1) / div1
+
+            ln_ratio_given_s0 = jnp.log(pr_hat_y_given_s0 / pr_hat_y + eps)
+            ln_ratio_given_s1 = jnp.log(pr_hat_y_given_s1 / pr_hat_y + eps)
+            #print(f'ln_ratio_given_s0: {ln_ratio_given_s0}')
+            #print(f'ln_ratio_given_s1: {ln_ratio_given_s1}')
+
+            ln_ratio = ln_ratio_given_s0 + ln_ratio_given_s1
+            fair_cost = jnp.sum(M * ln_ratio) 
+        #if self.fair_penalty == 'Rpr':
+            #if S is None:
+                #raise ValueError("Sensitive attribute S must be provided for fairness penalty.")
+            #p_y1 = jnp.mean(y_pred)
+            #p_y0 = jnp.mean(y_pred_0)
+
+            #if(debug == True):
+                #print(f"p_y1: {p_y1}, p_y0: {p_y0}")
+
+            #mask0 = (S == 0)
+            #mask1 = (S == 1)
+            #count0 = jnp.sum(mask0)
+            #count1 = jnp.sum(mask1)
+            #div0 = jnp.maximum(count0, 1)
+            #div1 = jnp.maximum(count1, 1)
             
-            if(debug == True):
-                print(f'div0: {div0}, div1: {div1}')
+            #if(debug == True):
+                #print(f'div0: {div0}, div1: {div1}')
 
-            p_y0_s0 = jnp.sum(y_pred_0 * mask0) / div0
-            p_y0_s1 = jnp.sum(y_pred_0 * mask1) / div1
-            p_y1_s0 = jnp.sum(y_pred * mask0) / div0
-            p_y1_s1 = jnp.sum(y_pred * mask1) / div1
+            #p_y0_s0 = jnp.sum(y_pred_0 * mask0) / div0
+            #p_y0_s1 = jnp.sum(y_pred_0 * mask1) / div1
+            #p_y1_s0 = jnp.sum(y_pred * mask0) / div0
+            #p_y1_s1 = jnp.sum(y_pred * mask1) / div1
 
-            if(debug == True):
-                print(f"p_y0_s0: {p_y0_s0}, p_y0_s1: {p_y0_s1}, p_y1_s0: {p_y1_s0}, p_y1_s1: {p_y1_s1}")
+            #if(debug == True):
+                #print(f"p_y0_s0: {p_y0_s0}, p_y0_s1: {p_y0_s1}, p_y1_s0: {p_y1_s0}, p_y1_s1: {p_y1_s1}")
 
-            ratio_y0_s0 = p_y0_s0 / (p_y0 + eps)
-            ratio_y0_s1 = p_y0_s1 / (p_y0 + eps)
-            ratio_y1_s0 = p_y1_s0 / (p_y1 + eps)
-            ratio_y1_s1 = p_y1_s1 / (p_y1 + eps)
+            #ratio_y0_s0 = p_y0_s0 / (p_y0 + eps)
+            #ratio_y0_s1 = p_y0_s1 / (p_y0 + eps)
+            #ratio_y1_s0 = p_y1_s0 / (p_y1 + eps)
+            #ratio_y1_s1 = p_y1_s1 / (p_y1 + eps)
 
-            if(debug == True):
-                print(f"ratio_y0_s0: {ratio_y0_s0}, ratio_y0_s1: {ratio_y0_s1}, ratio_y1_s0: {ratio_y1_s0}, ratio_y1_s1: {ratio_y1_s1}")
+            #if(debug == True):
+                #print(f"ratio_y0_s0: {ratio_y0_s0}, ratio_y0_s1: {ratio_y0_s1}, ratio_y1_s0: {ratio_y1_s0}, ratio_y1_s1: {ratio_y1_s1}")
 
-            log_ratio_y0 = jnp.where(mask0, jnp.log(ratio_y0_s0 + eps), jnp.log(ratio_y0_s1 + eps))
-            log_ratio_y1 = jnp.where(mask0, jnp.log(ratio_y1_s0 + eps), jnp.log(ratio_y1_s1 + eps))
+            #log_ratio_y0 = jnp.where(mask0, jnp.log(ratio_y0_s0 + eps), jnp.log(ratio_y0_s1 + eps))
+            #log_ratio_y1 = jnp.where(mask0, jnp.log(ratio_y1_s0 + eps), jnp.log(ratio_y1_s1 + eps))
             
-            if(debug == True):
-                print(f"log_ratio_y0: {log_ratio_y0}, log_ratio_y1: {log_ratio_y1}")
+            #if(debug == True):
+                #print(f"log_ratio_y0: {log_ratio_y0}, log_ratio_y1: {log_ratio_y1}")
 
-            rpr = jnp.mean(y_pred * log_ratio_y1 + y_pred_0 * log_ratio_y0)
-            fair_cost = self.fair_penalty_weight * rpr
+            #rpr = jnp.mean(y_pred * log_ratio_y1 + y_pred_0 * log_ratio_y0)
+            #fair_cost = self.fair_penalty_weight * rpr
         
-        if debug == True:
-            print(f"Base Cost: {base_cost}, Reg Cost: {reg_cost}, Fair Cost: {fair_cost}")
+        #if debug == True:
+            #print(f"Base Cost: {base_cost}, Reg Cost: {reg_cost}, Fair Cost: {fair_cost}")
         cost = base_cost + reg_cost + fair_cost
         return cost
 
@@ -124,7 +145,8 @@ class LogisticRegression:
         self.w = jnp.zeros(n)
         self.b = 0.0
 
-        cost_grad = jax.jit(jax.grad(self._cost_function, argnums=0))
+        # add jit
+        cost_grad = (jax.grad(self._cost_function, argnums=0))
 
         for epoch in range(self.epochs):
             perm = np.random.permutation(m)
