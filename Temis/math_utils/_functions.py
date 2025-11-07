@@ -1,3 +1,7 @@
+'''
+Module containing various mathematical utility functions. 
+It defines activations functions utilized across different machine learning algorithms.
+'''
 import numpy as np
 import jax.numpy as jnp
 
