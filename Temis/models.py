@@ -1,7 +1,140 @@
 import numpy as np
 import jax
 import jax.numpy as jnp
+from sklearn.metrics import log_loss
+from sklearn.base import clone
 from Temis.math_utils._functions import sigmoid
+
+'''
+This Should implement the base class for MinimaxFairness method presented
+in the paper https://arxiv.org/abs/2011.03108.
+
+It works by implementing a Two-Player Game formulation of Learner and Regulator.
+Learner: Will optimize objective function based on samples_weights and base cost function.
+Regulator: Will adjust sample_weights for next turn of game and final implementation.
+
+
+'''
+class MinimaxFairness:
+    '''
+    Model structure:
+        self.model_class : It is a class reference for the base method used.
+        self.T : Iteration count on the number of games it will run.
+        self.lr : adaptive learning rate, as shown in the paper it should be 1/sqrt(t) 
+            where t denotes the current iteration of the game.
+        self.n_groups : number of differente groups. (MAYBE ANOTHER NAME??)
+        self.eps : OPT1 satisfatibility.
+        self.debug : Enables debugging information.
+
+        --- 
+        Another useful information:
+        self.models : holds all models that are produced in the game.
+        self.lambdas_history : store the sample_weights history.
+        self.group_losses_history : store the group_losses_history.
+    '''
+    def __init__(self, model_class, iter=1000, debug=False):
+        self.model_class = model_class
+        self.T = None
+        self.lr = None
+        self.n_groups = None
+        self.iter = iter
+        self.eps = None
+        self.debug = debug
+
+        # Initialize storage for models, lambdas, and group losses history
+        self.models = []
+        self.lambdas_history = []
+        self.group_losses_history = []
+
+    '''
+    This method will implement the Two-Player game formulation logic.
+    The game consists of a Learner and a Regulator that will play their turn.
+    Learner turn: Optimize the objective function and return such parameters.
+    Regulator turn: Will adjust sample_weights so that more important samples have greater weight.
+    '''
+    def fit(self, X, y, groups):
+        if self.debug == True:
+            print(f"[DEBUG] Debugging fit information...")
+        n_samples = len(y)
+
+        unique_groups = np.unique(groups)
+        # This will be useful for defining iteration count self.T
+        n_groups = len(unique_groups)
+        self.n_groups = n_groups
+
+        if self.debug == True:
+            print(f"[DEBUG] Number identified groups: {self.n_groups}")
+
+        # This bound is explicit defined in the paper.
+
+        # Previous Design:
+        # If i assume to use it in the future, self.K no longer exists and
+        # now you must use self.n_groups
+        # self.T = int(np.ceil(np.log(self.K) / (2 * self.eps * self.eps)))
+
+        self.T = self.iter
+        # This was defined in the paper
+        self.eps = np.sqrt(np.log(n_groups)/(2*self.T))
+
+
+        # Define proportions of each group.
+        group_counts = {g: np.sum(groups == g) for g in unique_groups}
+
+        if self.debug == True:
+            print(f"[DEBUG] Group Counts: {group_counts}")
+
+        # In MinimaxFair Algorithm, the first weight is defined by proportion of samples.
+        self.lambdas = {g: group_counts[g] / n_samples for g in unique_groups}
+        if self.debug == True:
+            print(f"[DEBUG] Initial Lambdas: {self.lambdas}")
+
+        # Game formulation...
+        if self.debug == True:
+            print(f"[DEBUG] Initializing game with {self.T} rounds...")
+            
+        #sample_weights = np.zeros(n_samples)
+        #for g in unique_groups:
+            #mask = (groups == g)
+            #sample_weights[mask] = self.lambdas[g]
+
+        for t in range(1, self.T + 1):
+            self.lr = 1/np.sqrt(t)
+
+            if self.debug == True:
+                print(f"[DEBUG] Initialing round: {t}")
+
+            sample_weights = np.zeros(n_samples)    
+            for g in unique_groups:
+                mask = (groups == g)
+                sample_weights[mask] = self.lambdas[g]
+
+            #h_t = self.model_class(solver='lbfgs', max_iter=100)
+            h_t = clone(self.model_class)
+            h_t.fit(X, y, sample_weight=sample_weights)
+            self.models.append(h_t)
+
+            group_losses = {}
+            probs = h_t.predict_proba(X)
+
+            for g in unique_groups:
+                mask = (groups == g)
+                loss_k = log_loss(y[mask], probs[mask])
+                group_losses[g] = loss_k
+
+            self.group_losses_history.append(group_losses)
+            self.lambdas_history.append(self.lambdas.copy())
+
+            for g in unique_groups:
+                self.lambdas[g] *= np.exp(self.lr * group_losses[g])
+    def predict_proba(self, X):
+        if self.debug == True:
+            print(f"[DEBUG] debugging predict_proba information....")
+        preds = np.array([h.predict_proba(X) for h in self.models])
+        mean_preds = np.mean(preds, axis=0)
+        return mean_preds
+
+    def predict(self, X):
+        return np.argmax(self.predict_proba(X), axis=1)
 
 """
 Class that implements Logistic Regression using JAX for automatic differentiation and optimization.    
@@ -140,13 +273,13 @@ class LogisticRegression:
                 print(f'Gradient Magnitude - dw: {jnp.mean(jnp.abs(dw))}')
                 print(f'Gradient Magnitude - db: {jnp.abs(db)}')
 
-    def predict_probability(self, X : np.ndarray) -> np.ndarray:
+    def predict_proba(self, X : np.ndarray) -> np.ndarray:
         X = jnp.asarray(X)
         return sigmoid(jnp.dot(X, self.w) + self.b)
 
     def predict(self, X : np.ndarray, threshold : float = 0.5) -> np.ndarray:
         X = jnp.asarray(X)
-        return (self.predict_probability(X) >= threshold).astype(int)
+        return (self.predict_proba(X) >= threshold).astype(int)
 
     '''
     Method to print a debug statement to verify code reloads (specially in python notebooks).
