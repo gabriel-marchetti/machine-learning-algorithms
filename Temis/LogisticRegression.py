@@ -78,8 +78,10 @@ class LogisticRegression:
 
         l1_cost = self.penalty_weight * jnp.sum(jnp.abs(w))
         l2_cost = self.penalty_weight * jnp.sum(w ** 2)
-        reg_cost = jnp.where(self.penalty == 'l1', l1_cost,
-                             jnp.where(self.penalty == 'l2', l2_cost, 0.0))
+        reg_cost = jnp.where(
+            self.penalty == 'l1', l1_cost,
+            jnp.where(self.penalty == 'l2', l2_cost, 0.0)
+        )
 
         fair_cost = 0.0
         has_fairness = (self.fair_penalty == 'Rpr') & (S is not None)
@@ -105,8 +107,6 @@ class LogisticRegression:
         So be careful defining _cost_function to only use JAX operations.
     '''
     def fit(self, X : np.ndarray, y : np.ndarray, S : np.ndarray = None, debug : bool = False):
-        if(debug == True):
-            print('----------------------------------------------------------------------')
         X = jnp.asarray(X)
         y = jnp.asarray(y)
         S = jnp.asarray(S) if S is not None else None
@@ -136,9 +136,9 @@ class LogisticRegression:
                 self.b -= self.lr * db
 
             if debug == True and self.current_epoch % 10 == 0:
-                print(f'Epoch: {epoch}')
-                print(f'Gradient Magnitude - dw: {jnp.mean(jnp.abs(dw))}')
-                print(f'Gradient Magnitude - db: {jnp.abs(db)}')
+                print(f'[DEBUG] Epoch: {epoch}')
+                print(f'[DEBUG] Gradient Magnitude - dw: {jnp.mean(jnp.abs(dw))}')
+                print(f'[DEBUG] Gradient Magnitude - db: {jnp.abs(db)}')
 
     def predict_probability(self, X : np.ndarray) -> np.ndarray:
         X = jnp.asarray(X)
