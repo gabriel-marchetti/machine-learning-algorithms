@@ -6,6 +6,32 @@ from sklearn.metrics import roc_auc_score
 from Temis.fairness_metrics.spd import compute_spd
 from Temis.fairness_metrics.aod import compute_aod
 
+def extract_fairness(model, X, y, sensitive_attr):
+    """
+    Extract fairness metrics for a given model.
+
+    Parameters:
+    model: A model instance with a predict method.
+    X (pd.DataFrame): The input features including the sensitive attribute.
+    y (pd.Series): The true labels.
+    sensitive_attr (str): The name of the sensitive attribute column in X.
+
+    Returns:
+    dict: A dictionary containing the fairness metrics for the model.
+    """
+    print('Initiating extract_fairness execution...')
+    y_pred = model.predict(X)
+    sensitive_array = X[sensitive_attr]
+    print(sensitive_array)
+
+    spd = compute_spd(y_pred, sensitive_array)
+    aod = compute_aod(y, y_pred, sensitive_array)
+
+    return {
+        'Demographic Parity': spd,
+        'Equalized Odds': aod
+    }
+
 def compare_fairness(models, X, y, sensitive_attr_index):
     """
     Compare the fairness of multiple models using Demographic Parity and Equalized Odds metrics.

@@ -1,3 +1,5 @@
+# The base of this code is inspired by the code developed by GiovaniValdrighi in his repository
+# More can be found at: https://github.com/hiaac-finance/multiplicity/tree/master/multiplicity
 import numpy as np 
 import pandas as pd 
 import os

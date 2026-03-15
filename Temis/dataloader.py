@@ -1,3 +1,5 @@
+# The base of this code is inspired by the code developed by GiovaniValdrighi in his repository
+# More can be found at: https://github.com/hiaac-finance/multiplicity/tree/master/multiplicity
 from abc import ABC, abstractmethod
 from typing import Optional
 from sklearn.model_selection import train_test_split
@@ -45,6 +47,12 @@ class Dataset(ABC):
             test_size=self.test_size,
             random_state=self.random_state
         )
+
+    def get_train_data(self):
+        return self.X_train, self.y_train
+    
+    def get_test_data(self):
+        return self.X_test, self.y_test
 
 class German(Dataset):
     def __init__(
