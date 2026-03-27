@@ -60,11 +60,6 @@ Para contribuir ao projeto:
    ```
 
 2. Execute os testes:
-   ```bash
-   python -m pytest tests/
-   ```
+   TODO - escolher um framework de testes...
 
 3. Ou execute testes específicos:
-   ```bash
-   python tests/LogisticRegressionTest.py
-   ```
