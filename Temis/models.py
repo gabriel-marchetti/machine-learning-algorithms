@@ -176,6 +176,19 @@ class LogisticRegression:
         self.b = None
         self.current_epoch = 0
 
+    def _encode_sensitive_attribute_binary(self, S : np.ndarray = None) -> jnp.ndarray | None:
+        if S is None:
+            return None
+
+        sensitive_array = np.asarray(S).reshape(-1)
+        sensitive_values = np.unique(sensitive_array)
+
+        if sensitive_values.size != 2:
+            raise ValueError('Rpr fairness penalty currently supports only binary sensitive attributes.')
+
+        encoded = (sensitive_array == sensitive_values[1]).astype(np.int32)
+        return jnp.asarray(encoded)
+
     '''
     Private method to compute the cost function with optional regularization and fairness penalties.
     Parameters:
@@ -196,7 +209,6 @@ class LogisticRegression:
     '''
     def _cost_function(self, params, X : np.ndarray, y : np.ndarray, S : np.ndarray = None, debug : bool = False) -> float:
         w, b = params
-        m = X.shape[0]
         X = jnp.asarray(X)
         y = jnp.asarray(y)
         if S is not None:
@@ -209,17 +221,17 @@ class LogisticRegression:
         eps = 1e-5
         base_cost = -jnp.mean(y * jnp.log(y_pred_1 + eps) + (1-y) * jnp.log(y_pred_0 + eps))
 
-        l1_cost = self.penalty_weight * jnp.sum(jnp.abs(w))
-        l2_cost = self.penalty_weight * jnp.sum(w ** 2)
-        reg_cost = jnp.where(self.penalty == 'l1', l1_cost,
-                             jnp.where(self.penalty == 'l2', l2_cost, 0.0))
+        if self.penalty == 'l1':
+            reg_cost = self.penalty_weight * jnp.mean(jnp.abs(w))
+        elif self.penalty == 'l2':
+            reg_cost = self.penalty_weight * jnp.mean(w ** 2)
+        else:
+            reg_cost = 0.0
 
-        fair_cost = 0.0
-        has_fairness = (self.fair_penalty == 'Rpr') & (S is not None)
-        rpr = jnp.where(has_fairness,
-                        compute_rpr(y_pred_1, y_pred_0, S, eps),
-                        0.0)
-        fair_cost = self.fair_penalty_weight * rpr
+        if self.fair_penalty == 'Rpr' and S is not None:
+            fair_cost = self.fair_penalty_weight * compute_rpr(y_pred_1, y_pred_0, S, eps)
+        else:
+            fair_cost = 0.0
         
         cost = base_cost + reg_cost + fair_cost
         return cost
@@ -242,9 +254,9 @@ class LogisticRegression:
             print('----------------------------------------------------------------------')
         X = jnp.asarray(X)
         y = jnp.asarray(y)
-        S = jnp.asarray(S) if S is not None else None
+        S = self._encode_sensitive_attribute_binary(S)
 
-        m, n =  X.shape
+        _, n =  X.shape
         self.w = jnp.zeros(n)
         self.b = 0.0
 
@@ -252,21 +264,11 @@ class LogisticRegression:
 
         for epoch in range(self.epochs):
             self.current_epoch = epoch
-            perm = np.random.permutation(m)
-            X_shuffle = X[perm]
-            y_shuffle = y[perm]
-            S_shuffle = S[perm] if S is not None else None
+            grads = cost_grad((self.w, self.b), X, y, S, debug)
+            dw, db = grads
 
-            for i in range(0, m, self.batch_size):
-                X_batch = X_shuffle[i:i+self.batch_size]
-                y_batch = y_shuffle[i:i+self.batch_size]
-                S_batch = S_shuffle[i:i+self.batch_size] if S is not None else None
-
-                grads = cost_grad((self.w, self.b), X_batch, y_batch, S_batch, debug)
-                dw, db = grads
-
-                self.w -= self.lr * dw
-                self.b -= self.lr * db
+            self.w -= self.lr * dw
+            self.b -= self.lr * db
 
             if debug == True and self.current_epoch % 10 == 0:
                 print(f'Epoch: {epoch}')

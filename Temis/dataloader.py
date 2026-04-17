@@ -58,9 +58,15 @@ class German(Dataset):
     def __init__(
         self,
         path : str,
+        test_size : float = 0.2,
         random_state : Optional[int] = None
     ):
-        super().__init__("German", path, random_state)
+        super().__init__(
+            name="German",
+            path=path,
+            test_size=test_size,
+            random_state=random_state,
+        )
     
     def load_data(self) -> None:
         self.data = pd.read_csv(self.path)
